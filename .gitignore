@@ -1,0 +1,6 @@
+/classes/
+/.exploded/
+.classpath
+.project
+.settings
+modules/
