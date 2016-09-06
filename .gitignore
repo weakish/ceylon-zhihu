@@ -1,6 +1,7 @@
 /classes/
 /.exploded/
 .classpath
+buil.xml
 .project
 .settings
 modules/
