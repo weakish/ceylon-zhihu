@@ -8,5 +8,6 @@ native ("jvm") module io.github.weakish.zhihu "0.0.0" {
     import ceylon.random "1.2.2";
     import ceylon.time "1.2.2";
     import ceylon.logging "1.2.2";
+    import ceylon.test "1.2.2";
     import de.dlkw.ccrypto.svc "0.0.2";
 }

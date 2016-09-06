@@ -59,6 +59,10 @@ import ceylon.time {
 import de.dlkw.ccrypto.svc {
     sha256
 }
+import ceylon.test {
+    assertEquals,
+    test
+}
 
 "Run the module `io.github.weakish.zhihu`."
 shared void run() {
@@ -80,6 +84,7 @@ Integer ex_usage = 64;
 
 Logger log = logger(`module io.github.weakish.zhihu`);
 
+"Returns column info json string."
 shared String fetchColumnInfo(String columnName) {
     String columnInfo = getColumn(columnName);
     Path path = parsePath("``columnName``_info.json");
@@ -87,6 +92,7 @@ shared String fetchColumnInfo(String columnName) {
     return columnInfo;
 }
 
+"Fetch comments json files, named `POST_SLUG_comments."
 shared void fetchComments(JsonArray posts) {
     for (slug in slugs(posts)) {
         String? comment = getComments(slug);
@@ -108,14 +114,17 @@ shared Uri? titleImageUrl(JsonObject post) {
     }
 }
 
+"Skip posts which can not be parsed as JsonObject, or does not contain title Image."
 shared {Uri*} titleImagesUrls(JsonArray posts) {
     return { for (post in posts)
             if (is JsonObject post, exists url = titleImageUrl(post))
                 url };
 }
 
+"task pool"
 shared alias Tasks => ArrayList<Process>;
 
+"Fetch title images, non blocking."
 shared Tasks fetchTitleImages(JsonArray posts) {
     {Uri*} urls = titleImagesUrls(posts);
     Tasks tasks = ArrayList<Process>();
@@ -125,6 +134,8 @@ shared Tasks fetchTitleImages(JsonArray posts) {
     return tasks;
 }
 
+"Parse post content for image urls.
+ Also supports special syntax of zhihu hosted images."
 shared {String*} contentImage(String content) {
     Regex regexp = regex {
         expression = """<img src=\"([^"]+)"""";
@@ -137,6 +148,8 @@ shared {String*} contentImage(String content) {
     };
 }
 
+"Extract post content."
+throws(`class KeyNotFound`)
 shared String content(JsonObject post) {
     if (is String postContent = post["content"], !postContent.empty) {
         return postContent;
@@ -145,6 +158,7 @@ shared String content(JsonObject post) {
     }
 }
 
+"Map content(post) over posts."
 shared {String*} contents(JsonArray posts) {
     return { for (post in posts) if (is JsonObject post) content(post) };
 }
@@ -159,6 +173,7 @@ Integer randomCdnNumber(Integer[] cdnNumbers = [1, 2, 3, 4]) {
     }
 }
 
+"Urlify images hosted by zhihu CDN."
 shared Uri urlify(String imagePath, Integer cdnNumber = randomCdnNumber()) {
     Uri absoluteUrl;
     if (imagePath.startsWith("https://"), imagePath.startsWith("http://")) {
@@ -180,6 +195,12 @@ shared [Integer, String] fetchFileSync(Uri url) {
     };
     return [process.waitForExit(), url.string];
 }
+test void fetchNonexistFile() {
+    value nonexist = "nonexist://127.0.0.1/nonexist.file";
+    Uri nonexistUrl = parseUri(nonexist);
+    [Integer, String] result = [1, nonexist];
+    assertEquals(fetchFileSync(nonexistUrl), result);
+}
 
 "Return a list of `[exitCode, failedUrl]`.
 
@@ -198,6 +219,7 @@ shared {[Integer, String]*} fetchContentImages(JsonArray posts) {
     return failedUrls;
 }
 
+"The entrypoint gluing all fetching functions."
 void fetchColumnPosts(String columnName) {
     String columnInfo = fetchColumnInfo(columnName);
     value [count, avatar, creatorAvatar] = parseColumnInfo(columnInfo);
@@ -264,7 +286,7 @@ void fetchColumnPosts(String columnName) {
 }
 
 "Check tasks, return a tuple of [Unfinished, Failed] tasks."
-[Tasks, Tasks] checkTasks(Tasks tasks) {
+shared [Tasks, Tasks] checkTasks(Tasks tasks) {
     Tasks unfinished = ArrayList<Process>();
     Tasks failed = ArrayList<Process>();
     for (task in tasks) {
@@ -284,7 +306,8 @@ void fetchColumnPosts(String columnName) {
     return [unfinished, failed];
 }
 
-[Integer?, Uri?, Uri?] parseColumnInfo(String columnInfo) {
+"Parse columninfo json string for postsCount, urls of avatar and creatorAvatar."
+shared [Integer?, Uri?, Uri?] parseColumnInfo(String columnInfo) {
     Integer? count;
     Uri? avatar;
     Uri? creatorAvatar;
@@ -306,7 +329,8 @@ void fetchColumnPosts(String columnName) {
     return [count, avatar, creatorAvatar];
 }
 
-Process fetchFile(Uri url) {
+"Fetch file via wget, non blocking."
+shared Process fetchFile(Uri url) {
     Process process = createProcess {
         command = "wget";
         arguments = ["-c", url.string]; // --continue
@@ -314,7 +338,8 @@ Process fetchFile(Uri url) {
     return process;
 }
 
-Tasks fetchAvatarFiles(Uri? avatar, Uri? creatorAvatar) {
+"Non blocking."
+shared Tasks fetchAvatarFiles(Uri? avatar, Uri? creatorAvatar) {
     value tasks = ArrayList<Process>();
     if (exists avatar) {
         tasks.add(fetchFile(avatar));
@@ -327,7 +352,7 @@ Tasks fetchAvatarFiles(Uri? avatar, Uri? creatorAvatar) {
 
 "Write a String to a filePath,
  if filePath already exist, write to filePath_SHA256"
-void writeFile(String content, Path filePath) {
+shared void writeFile(String content, Path filePath) {
     if (is Nil location = filePath.resource) {
         File file = location.createFile();
         try (writer = file.Overwriter()) {
@@ -350,7 +375,8 @@ void writeFile(String content, Path filePath) {
     }
 }
 
-String? fetchPosts(Integer? count, String columnName) {
+"Returns a json string and saves to `COLUMN_NAME_posts.json`."
+shared String? fetchPosts(Integer? count, String columnName) {
     if (exists count, count > 0) {
         String posts = getPosts(columnName, count);
         Path path = parsePath("``columnName``_posts.json");
@@ -364,11 +390,16 @@ String? fetchPosts(Integer? count, String columnName) {
 
 String apiRoot = "https://zhuanlan.zhihu.com/api";
 
-Uri column(String name) {
-    return parseUri("``apiRoot``/columns/``name``");
+"Return full column url."
+shared Uri column(String columnName) {
+    return parseUri("``apiRoot``/columns/``columnName``");
+}
+test void columnExample() {
+    assertEquals(column("wooyun"), parseUri("https://zhuanlan.zhihu.com/api/columns/wooyun"));
 }
 
-Uri posts(String name, Integer limit = 10) {
+"Return posts url."
+shared Uri posts(String name, Integer limit = 10) {
     if (limit > 0) {
         return parseUri("``column(name)``/posts?limit=``limit``");
     } else {
@@ -376,11 +407,14 @@ Uri posts(String name, Integer limit = 10) {
     }
 }
 
-Uri comments(Integer slug) {
+"Return url of comments of a single post."
+shared Uri comments(Integer slug) {
     return parseUri("``apiRoot``/posts/``slug``/comments");
 }
 
-"Given a Uri, get Response contents, following one direct."
+"Given a Uri, get Response contents, following one direct.
+ Throws when finally getting non 200."
+throws(`class Exception`)
 shared String getContent(Uri url, Boolean redirected = false) {
     Response r = url.get().execute();
     switch (status = r.status)
@@ -410,6 +444,7 @@ shared String getContent(Uri url, Boolean redirected = false) {
     }
 }
 
+"Returns JsonObject[key] else null."
 shared Value getJsonValue(JsonObject json, String key) {
     if (exists result = json[key]) {
         return result;
@@ -424,6 +459,7 @@ shared String getColumn(String name) {
     return getContent(column(name));
 }
 
+"Parse `columnInfo` or `creator` for avatar url."
 shared Uri? avatarUrl(JsonObject json) {
     if (is JsonObject avatar = getJsonValue(json, "avatar")) {
         if (is String id = avatar["id"], is String template = avatar["template"]) {
@@ -440,7 +476,8 @@ shared Uri? avatarUrl(JsonObject json) {
     }
 }
 
-class KeyNotFound(String key) extends Exception("`key` not found.") {}
+"When not satisfied by just returnning null."
+shared class KeyNotFound(String key) extends Exception("`key` not found.") {}
 
 shared Integer postsCount(JsonObject json) {
     if (exists count = getJsonValue(json, "postsCount")) {
@@ -472,6 +509,7 @@ shared String getPosts(String name, Integer limit = 10) {
     return getContent(posts(name, limit));
 }
 
+"Zhihu uses Integer for post slug."
 shared Integer slug(JsonObject post) {
     if (is Integer slug = post["slug"]) {
         return slug;
@@ -480,10 +518,12 @@ shared Integer slug(JsonObject post) {
     }
 }
 
+"Map slug(post) over posts."
 shared {Integer*} slugs(JsonArray posts) {
     return { for (post in posts) if (is JsonObject post) slug(post) };
 }
 
+"Returns comments json string of a single post."
 shared String? getComments(Integer slug) {
     return getContent(comments(slug));
 }
