@@ -11,7 +11,11 @@ import ceylon.file {
     Path,
     parsePath,
     Nil,
-    File
+    File,
+    current,
+    createFileIfNil,
+    Directory,
+    Link
 }
 import ceylon.json {
     JsonObject=Object,
@@ -47,6 +51,9 @@ import ceylon.regex {
     Regex,
     regex,
     MatchResult
+}
+import ceylon.time {
+    now
 }
 
 import de.dlkw.ccrypto.svc {
@@ -107,9 +114,11 @@ shared {Uri*} titleImagesUrls(JsonArray posts) {
                 url };
 }
 
-shared ArrayList<Process> fetchTitleImages(JsonArray posts) {
+shared alias Tasks => ArrayList<Process>;
+
+shared Tasks fetchTitleImages(JsonArray posts) {
     {Uri*} urls = titleImagesUrls(posts);
-    value tasks = ArrayList<Process>();
+    Tasks tasks = ArrayList<Process>();
     for (url in urls) {
         tasks.add(fetchFile(url));
     }
@@ -162,28 +171,117 @@ shared Uri urlify(String imagePath, Integer cdnNumber = randomCdnNumber()) {
     return absoluteUrl;
 }
 
-shared ArrayList<Process> fetchContentImages(JsonArray posts) {
-    value tasks = ArrayList<Process>();
+"Like [[fetchFile]] but blocking.
+ Return exit code and url."
+shared [Integer, String] fetchFileSync(Uri url) {
+    Process process = createProcess {
+        command = "wget";
+        arguments = ["-c", url.string]; // --continue
+    };
+    return [process.waitForExit(), url.string];
+}
+
+"Return a list of `[exitCode, failedUrl]`.
+
+ Content images may be hosted outside zhihu, which may cause file name collosion.
+ Name collosion is simply resolved as file name already exist,
+ i.e. rename with `fileName_SHA256`."
+shared {[Integer, String]*} fetchContentImages(JsonArray posts) {
+    value urls = ArrayList<[Integer, String]>();
     for (content in contents(posts)) {
         for (imagePath in contentImage(content)) {
-            tasks.add(fetchFile(urlify(imagePath)));
+            // Blocking to avoid too many parallel downloads.
+            urls.add(fetchFileSync(urlify(imagePath)));
         }
     }
-    return tasks;
+    value failedUrls = urls.filter((pair) => !pair.first.zero);
+    return failedUrls;
 }
 
 void fetchColumnPosts(String columnName) {
     String columnInfo = fetchColumnInfo(columnName);
     value [count, avatar, creatorAvatar] = parseColumnInfo(columnInfo);
-    value tasks = ArrayList<Process>();
+    variable Tasks tasks = ArrayList<Process>();
     tasks.addAll(fetchAvatarFiles(avatar, creatorAvatar));
+    value failedUrls = ArrayList<[Integer, String]>();
     
     String? posts = fetchPosts(count, columnName);
     if (exists posts, is JsonArray postsJson = parseJson(posts)) {
         fetchComments(postsJson);
         tasks.addAll(fetchTitleImages(postsJson));
-        tasks.addAll(fetchContentImages(postsJson));
+        failedUrls.addAll(fetchContentImages(postsJson));
     }
+    variable Tasks toRetry = ArrayList<Process>();
+    Tasks failedRetrying = ArrayList<Process>();
+    while (!tasks.empty) {
+        value [unfinished, failed] = checkTasks(tasks);
+        toRetry.addAll(failed);
+        tasks = unfinished;
+    }
+    // Retry once.
+    while (!toRetry.empty) {
+        value [unfinished, failed] = checkTasks(toRetry);
+        failedRetrying.addAll(failed);
+        toRetry = unfinished;
+    }
+    // Record failed tasks `exitCode,url` in `zhihu_iso8061Time.csv`.
+    // Prepare log file.
+    String iso8601Now = now().string;
+    Path logPath = current.childPath("zhihu_``iso8601Now``.csv"); // Record all failed tasks excluding content image tasks.
+    for (task in failedRetrying) {
+        if (exists url = task.arguments.last, exists status = task.exitCode) {
+            log.debug(() =>
+                    "Failed(``status``) ``task.command`` ``task.arguments`` in ``task.path``");
+            switch (logLocation = logPath.resource)
+            case (is File|Nil) {
+                File file = createFileIfNil(logLocation);
+                try (writer = file.Appender()) {
+                    writer.writeLine("``status``,``url``");
+                }
+            }
+            case (is Directory|Link) {
+                log.fatal(() =>
+                        "It seems ``logPath`` is a directory! Either a bug or your system time is wrong!");
+            }
+        } else {
+            log.fatal(task.string);
+        }
+    }
+    // Record failed urls of referred by post content.
+    for ([status, url] in failedUrls) {
+        switch (logLocation = logPath.resource)
+        case (is File|Nil) {
+            File file = createFileIfNil(logLocation);
+            try (writer = file.Appender()) {
+                writer.writeLine("``status``,``url``");
+            }
+        }
+        case (is Directory|Link) {
+            log.fatal(() =>
+                    "It seems ``logPath`` is a directory! Either a bug or your system time is wrong!");
+        }
+    }
+}
+
+"Check tasks, return a tuple of [Unfinished, Failed] tasks."
+[Tasks, Tasks] checkTasks(Tasks tasks) {
+    Tasks unfinished = ArrayList<Process>();
+    Tasks failed = ArrayList<Process>();
+    for (task in tasks) {
+        if (is Integer status = task.exitCode) {
+            if (!status.zero) {
+                log.debug(() =>
+                        "Done: ``task.command`` ``task.arguments`` in ``task.path``");
+            } else {
+                log.debug(() =>
+                        "Failed(``status``) ``task.command`` ``task.arguments`` in ``task.path``");
+                failed.add(task);
+            }
+        } else {
+            unfinished.add(task);
+        }
+    }
+    return [unfinished, failed];
 }
 
 [Integer?, Uri?, Uri?] parseColumnInfo(String columnInfo) {
@@ -216,7 +314,7 @@ Process fetchFile(Uri url) {
     return process;
 }
 
-ArrayList<Process> fetchAvatarFiles(Uri? avatar, Uri? creatorAvatar) {
+Tasks fetchAvatarFiles(Uri? avatar, Uri? creatorAvatar) {
     value tasks = ArrayList<Process>();
     if (exists avatar) {
         tasks.add(fetchFile(avatar));
@@ -265,9 +363,11 @@ String? fetchPosts(Integer? count, String columnName) {
 }
 
 String apiRoot = "https://zhuanlan.zhihu.com/api";
+
 Uri column(String name) {
-    return parseUri("``apiRoot``/columns/name");
+    return parseUri("``apiRoot``/columns/``name``");
 }
+
 Uri posts(String name, Integer limit = 10) {
     if (limit > 0) {
         return parseUri("``column(name)``/posts?limit=``limit``");
@@ -275,6 +375,7 @@ Uri posts(String name, Integer limit = 10) {
         throw InvalidTypeException("`limit` > 0");
     }
 }
+
 Uri comments(Integer slug) {
     return parseUri("``apiRoot``/posts/``slug``/comments");
 }
@@ -305,7 +406,7 @@ shared String getContent(Uri url, Boolean redirected = false) {
     }
     else {
         log.error(r.string);
-        throw Exception("Got ``r.status``.");
+        throw Exception("Got ``r.status`` at ``url``.");
     }
 }
 
@@ -352,7 +453,6 @@ shared Integer postsCount(JsonObject json) {
         throw KeyNotFound("postsCount");
     }
 }
-
 
 """Get posts belong to a column, including post content, without comments.
      
