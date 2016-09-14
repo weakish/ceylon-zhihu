@@ -480,7 +480,7 @@ shared Uri? avatarUrl(JsonObject json) {
     }
 }
 
-"When not satisfied by just returnning null."
+"When not satisfied with just returnning null."
 shared class KeyNotFound(String key) extends Exception("`key` not found.") {}
 
 shared Integer postsCount(JsonObject json) {
