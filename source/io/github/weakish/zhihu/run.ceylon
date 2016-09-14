@@ -65,6 +65,7 @@ import ceylon.test {
 }
 
 "Run the module `io.github.weakish.zhihu`."
+suppressWarnings("expressionTypeNothing")
 shared void run() {
     addLogWriter(writeSimpleLog);
     if (exists columnName = process.arguments.first) {
@@ -220,19 +221,22 @@ shared {[Integer, String]*} fetchContentImages(JsonArray posts) {
 }
 
 "The entrypoint gluing all fetching functions."
+tagged("TODO") // extract small functions from it
 void fetchColumnPosts(String columnName) {
     String columnInfo = fetchColumnInfo(columnName);
     value [count, avatar, creatorAvatar] = parseColumnInfo(columnInfo);
+
     variable Tasks tasks = ArrayList<Process>();
     tasks.addAll(fetchAvatarFiles(avatar, creatorAvatar));
     value failedUrls = ArrayList<[Integer, String]>();
-    
+
     String? posts = fetchPosts(count, columnName);
     if (exists posts, is JsonArray postsJson = parseJson(posts)) {
         fetchComments(postsJson);
         tasks.addAll(fetchTitleImages(postsJson));
         failedUrls.addAll(fetchContentImages(postsJson));
     }
+
     variable Tasks toRetry = ArrayList<Process>();
     Tasks failedRetrying = ArrayList<Process>();
     while (!tasks.empty) {
@@ -376,6 +380,7 @@ shared void writeFile(String content, Path filePath) {
 }
 
 "Returns a json string and saves to `COLUMN_NAME_posts.json`."
+tagged("TODO") // should be two function, one pure, one side effect.
 shared String? fetchPosts(Integer? count, String columnName) {
     if (exists count, count > 0) {
         String posts = getPosts(columnName, count);
