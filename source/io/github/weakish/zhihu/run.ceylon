@@ -417,9 +417,8 @@ shared Uri comments(Integer slug) {
     return parseUri("``apiRoot``/posts/``slug``/comments");
 }
 
-"Given a Uri, get Response contents, following one direct.
- Throws when finally getting non 200."
-throws(`class Exception`)
+"Given a Uri, get Response content, following one direct."
+throws(`class Exception`, "when finally getting non 200")
 shared String getContent(Uri url, Boolean redirected = false) {
     Response r = url.get().execute();
     switch (status = r.status)
