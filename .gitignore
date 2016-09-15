@@ -1,6 +1,7 @@
 /classes/
 /.exploded/
 .classpath
+.idea
 .project
 .settings
 modules/
