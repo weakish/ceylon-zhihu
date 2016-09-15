@@ -404,11 +404,12 @@ test void columnExample() {
 }
 
 "Return posts url."
+throws(`class InvalidTypeException`, "limit <= 0")
 shared Uri posts(String name, Integer limit = 10) {
     if (limit > 0) {
         return parseUri("``column(name)``/posts?limit=``limit``");
     } else {
-        throw InvalidTypeException("`limit` > 0");
+        throw InvalidTypeException("`limit` must > 0");
     }
 }
 
@@ -483,6 +484,9 @@ shared Uri? avatarUrl(JsonObject json) {
 "When not satisfied with just returnning null."
 shared class KeyNotFound(String key) extends Exception("`key` not found.") {}
 
+"Given a column info, returns postsCount."
+throws(`class KeyNotFound`, "when there is no postsCount field")
+throws(`class InvalidTypeException`, "when `postsCount` does not have an Integer value")
 shared Integer postsCount(JsonObject json) {
     if (exists count = getJsonValue(json, "postsCount")) {
         if (is Integer count) {
@@ -514,6 +518,7 @@ shared String getPosts(String name, Integer limit = 10) {
 }
 
 "Zhihu uses Integer for post slug."
+throws(`class InvalidTypeException`, "when thre is no slug field in post")
 shared Integer slug(JsonObject post) {
     if (is Integer slug = post["slug"]) {
         return slug;
