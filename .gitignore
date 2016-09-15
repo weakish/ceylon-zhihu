@@ -2,6 +2,7 @@
 /.exploded/
 .classpath
 .idea
+*.iml
 .project
 .settings
 modules/
