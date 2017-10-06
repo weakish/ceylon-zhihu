@@ -146,7 +146,8 @@ shared {String*} contentImage(String content) {
     MatchResult[] matches = regexp.findAll(content);
     return { for (match in matches)
             if (nonempty imagePathMatch = match.groups)
-                imagePathMatch.first
+            if (is String matched = imagePathMatch.first)
+                matched
     };
 }
 
