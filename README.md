@@ -37,8 +37,6 @@ Development
 
 You need Ceylon, unless you want to mess up with decompiled Java code.
 
-Tested on Ceylon 1.2.2, may work with other versions.
-
 If you need to modify the source, clone this repository with git.
 
 If you do not want to use git,
