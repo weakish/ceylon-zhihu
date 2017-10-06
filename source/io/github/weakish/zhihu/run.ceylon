@@ -30,13 +30,14 @@ import ceylon.logging {
     Logger,
     logger
 }
-import ceylon.net.http {
+import ceylon.http.common {
     Header
 }
-import ceylon.net.http.client {
-    Response
+import ceylon.http.client {
+    Response,
+    get
 }
-import ceylon.net.uri {
+import ceylon.uri {
     Uri,
     parseUri=parse
 }
@@ -422,7 +423,7 @@ shared Uri comments(Integer slug) {
 throws(`class Exception`, "when finally getting non 200")
 todo("refactor using io.github.weakish.request")
 shared String getContent(Uri url, Boolean redirected = false) {
-    Response r = url.get().execute();
+    Response r = get(url).execute();
     switch (status = r.status)
     case (200) { // OK
         return r.contents;
