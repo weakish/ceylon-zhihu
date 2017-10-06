@@ -145,8 +145,7 @@ shared {String*} contentImage(String content) {
     };
     MatchResult[] matches = regexp.findAll(content);
     return { for (match in matches)
-            if (nonempty imagePathMatch = match.groups)
-            if (is String matched = imagePathMatch.first)
+            if (nonempty imagePathMatch = match.groups, is String matched = imagePathMatch.first)
                 matched
     };
 }
@@ -422,7 +421,7 @@ shared Uri comments(Integer slug) {
 
 "Given a Uri, get Response content, following one direct."
 throws(`class Exception`, "when finally getting non 200")
-todo("refactor using io.github.weakish.request")
+// TODO refactor using io.github.weakish.request
 shared String getContent(Uri url, Boolean redirected = false) {
     Response r = get(url).execute();
     switch (status = r.status)
