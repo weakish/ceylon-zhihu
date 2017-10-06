@@ -420,6 +420,7 @@ shared Uri comments(Integer slug) {
 
 "Given a Uri, get Response content, following one direct."
 throws(`class Exception`, "when finally getting non 200")
+todo("refactor using io.github.weakish.request")
 shared String getContent(Uri url, Boolean redirected = false) {
     Response r = url.get().execute();
     switch (status = r.status)
