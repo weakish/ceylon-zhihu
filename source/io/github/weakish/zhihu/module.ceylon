@@ -32,7 +32,7 @@
 
    Possible clauses of name collosion:
 
-   - images in posts have somee file name, e.g.
+   - images in posts have same file name, e.g.
 
        * `http://hostA/same.jpg` and `http://hostB/same.jpg`
        * `http://same/dirA/same.jpg` and `http://same/dirB/same.jpg`
